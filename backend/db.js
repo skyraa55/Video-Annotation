@@ -9,5 +9,116 @@ const userSchema =new mongoose.Schema({
     
 },{timestamps:true});
 
-const userModel = new mongoose.model("user",userSchema);
-export default userModel;
+
+const videoSchema = new mongoose.Schema({
+    source:{type:String,required:true},
+    platform:{type:String,required:true},
+    duration : Number,
+    uploadedBy : {type:mongoose.Schema.Types.ObjectId,ref:"user"},
+    annotations :[
+        {
+            _id:false,
+            type:{
+                type:String,
+                enum:["shape","draw","text","emoji","comment","note","highlight"],
+                requied:true
+            },
+            startTime:{
+                type:Number,
+                required:true
+            },
+            endTime:{
+                type:Number,
+            },
+            position:{
+                x:Number,
+                y:Number
+            },
+            size:{
+                width:Number,
+                height:Number
+            },
+            rotation:{
+                type:Number,
+                default:0
+            },
+            data:{
+                paths:[
+                    {
+                        points:[{x:Number,y:Number}],
+                        color:String,
+                        strokeWidth:Number,
+                        opaicty:Number
+
+                    }
+                ],
+                // shapes
+                shapeType:{type:String,enum:["rectangle","circle","arrow","line","square"]},
+                strokeColor:String,
+                fillColor:String,
+                strokeWidth:Number,
+                // text and emoji
+                text:String,
+                fontSize:Number,
+                fontFamily:String,
+                textColor:String,
+                backgroundColor:String,
+                emoji:String,
+                // comments
+                comment:{
+                    text:String,
+                    replies:[
+                        {
+                            userId:{type:mongoose.Schema.Types.ObjectId,ref:"user"},
+                            text:String,
+                            createdAt:{type:Date,default:Date.now}
+
+                        }
+                    ]
+                },
+                // notes
+                notes:{
+                    pages:[
+                        {
+                            title:String,
+                            content:String,
+                            textColor:String,
+                            backgroundColor:String,
+                            image:[
+                                {
+                                    url:String,
+                                    width:Number,
+                                    height:Number
+                                }
+                            ]
+
+                        }
+                    ]
+                },
+                // highlightcolor 
+                highlightColor:{type:String},
+        },
+        draggable:{
+            type:Boolean,
+            default:true
+        },
+        visible:{
+            type:Boolean,
+            default:true
+        },
+        createdAt:{
+            type:Date,
+            default:Date.now
+        }
+
+
+
+
+        }
+    ]
+
+})
+
+export const userModel = new mongoose.model("user",userSchema);
+export const videoModel = new mongoose.model("video",videoSchema);
+

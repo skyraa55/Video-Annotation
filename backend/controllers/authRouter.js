@@ -1,5 +1,5 @@
 import express from 'express';
-import userModel from '../db.js';
+import { userModel } from '../db.js';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import dotenv from'dotenv';
