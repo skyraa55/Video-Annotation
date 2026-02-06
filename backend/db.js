@@ -9,19 +9,31 @@ const userSchema =new mongoose.Schema({
     
 },{timestamps:true});
 
-
 const videoSchema = new mongoose.Schema({
-    source:{type:String,required:true},
-    platform:{type:String,required:true},
-    duration : Number,
-    uploadedBy : {type:mongoose.Schema.Types.ObjectId,ref:"user"},
+    url:{type:String},
+    publicId:{type:String},
+    format:{type:String},
+    duration:{type:Number},
+    size:{type:Number},
+    // uploadedBy : {type:mongoose.Schema.Types.ObjectId,ref:"user",required:true},
+    
+
+},{ timestamps:true });
+
+const annotationSchema = new mongoose.Schema({
+    
+    videoId:{
+        type:mongoose.Schema.Types.ObjectId,
+        ref:"video",
+        required:true
+    },
     annotations :[
         {
             _id:false,
             type:{
                 type:String,
                 enum:["shape","draw","text","emoji","comment","note","highlight"],
-                requied:true
+                required:true
             },
             startTime:{
                 type:Number,
@@ -48,7 +60,7 @@ const videoSchema = new mongoose.Schema({
                         points:[{x:Number,y:Number}],
                         color:String,
                         strokeWidth:Number,
-                        opaicty:Number
+                        opacity:Number
 
                     }
                 ],
@@ -120,5 +132,6 @@ const videoSchema = new mongoose.Schema({
 })
 
 export const userModel = new mongoose.model("user",userSchema);
+export const annotationModel = new mongoose.model("annotation",annotationSchema);
 export const videoModel = new mongoose.model("video",videoSchema);
 
