@@ -29,7 +29,7 @@ const annotationSchema = new mongoose.Schema({
     },
     annotations :[
         {
-            _id:false,
+            _id:{type:mongoose.Schema.Types.ObjectId},
             type:{
                 type:String,
                 enum:["shape","draw","text","emoji","comment","note","highlight"],
