@@ -21,7 +21,6 @@ const videoSchema = new mongoose.Schema({
 },{ timestamps:true });
 
 const annotationSchema = new mongoose.Schema({
-    
     videoId:{
         type:mongoose.Schema.Types.ObjectId,
         ref:"video",

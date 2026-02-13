@@ -31,30 +31,33 @@ function App() {
       return;
     }
     return {
-      videoId: videoId,
-      type: "shape",
-      startTime,
-      endTime,
-      position: {
-        x: obj.left / vw,
-        y: obj.top / vh
-      },
-      size: {
-        width: (obj.width * obj.scaleX) / vw,
-        height: (obj.height * obj.scaleY) / vh
-      },
-      rotation: obj.angle || 0,
-      data: {
-        shapeType: tool,
-        strokeColor: obj.strokeColor,
-        fillColor: obj.fill,
-        strokeWidth: obj.strokeWidth,
-        draggable: true,
-        visible: true
-      }
+      videoId,
+      annotations: [
+        {
+          type: "shape",
+          startTime,
+          endTime,
+          position: {
+            x: obj.left / vw,
+            y: obj.top / vh
+          },
+          size: {
+            width: (obj.width * obj.scaleX) / vw,
+            height: (obj.height * obj.scaleY) / vh
+          },
+          rotation: obj.angle || 0,
+          draggable: true,
+          visible: true,
+          data: {
+            shapeType: tool,
+            strokeColor: obj.stroke,
+            fillColor: obj.fill,
+            strokeWidth: obj.strokeWidth
+          }
+        }
+      ]
+    };
 
-
-    }
 
 
 
@@ -72,7 +75,16 @@ function App() {
   useEffect(() => {
     if (!url || !videoId) return;
 
-    axios.get(`http://localhost:3000/api/annotations/${videoId}`).then(res => setAnnotations(res.data.annotations || []));
+    // axios.get(`http://localhost:3000/api/annotations/${videoId}`).then(res => setAnnotations(res.data.annotations || []));
+    axios.get(`http://localhost:3000/api/annotations/${videoId}`).then(res => {
+      const doc = res.data.annotations;
+      if (!doc || !Array.isArray(doc.annotations)) {
+        setAnnotations([]);
+        return;
+      }
+      setAnnotations(doc.annotations);
+    });
+
   }, [url, videoId]);
 
 
@@ -226,9 +238,11 @@ function App() {
         tool
       );
       if (!annotations) return;
-      // setAnnotations(prev => [...(Array.isArray(prev) ? prev : []),annotations]);
       const res = await axios.post("http://localhost:3000/api/annotations/create", annotations);
-      setAnnotations(prev, [...prev, ...res.data.annotations]);
+      const savedAnnotation = res.data.annotations.annotations[0];
+      shape.annotationId = savedAnnotation._id;
+      renderedAnnotationRef.current.set(savedAnnotation._id, shape);
+      setAnnotations(prev => [...prev, savedAnnotation]);
 
       currentShapeRef.current = null;
 
