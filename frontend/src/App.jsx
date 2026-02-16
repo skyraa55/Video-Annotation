@@ -6,6 +6,7 @@ import * as fabric from "fabric";
 import Rectangle from './icons/Rectangle';
 import Rambus from './icons/Rambus';
 import Circle from './icons/Circle';
+
 function App() {
   const fileRef = useRef(null);
   const videoRef = useRef(null);
@@ -22,46 +23,52 @@ function App() {
   const [videoId, setVideoId] = useState(null);
   const renderedAnnotationRef = useRef(new Map());
   const isDrawingRef = useRef(false);
+
   const SerializeAnnotations = (shape, canvas, startTime, endTime, tool) => {
-    const obj = shape.toObject();
-    const vw = canvas.getWidth();
-    const vh = canvas.getHeight();
     if (!videoId) {
       console.log("video is not uploaded yet");
       return;
     }
-    return {
-      videoId,
-      annotations: [
-        {
-          type: "shape",
-          startTime,
-          endTime,
-          position: {
-            x: obj.left / vw,
-            y: obj.top / vh
-          },
-          size: {
-            width: (obj.width * obj.scaleX) / vw,
-            height: (obj.height * obj.scaleY) / vh
-          },
-          rotation: obj.angle || 0,
-          draggable: true,
-          visible: true,
-          data: {
-            shapeType: tool,
-            strokeColor: obj.stroke,
-            fillColor: obj.fill,
-            strokeWidth: obj.strokeWidth
-          }
-        }
-      ]
-    };
-
-
-
-
+    const obj = shape.toObject();
+    const vw = canvas.getWidth();
+    const vh = canvas.getHeight();
+    const annotations = {
+      type: tool == "draw" ? "draw" : "shape",
+      startTime,
+      endTime,
+      position: {
+        x: obj.left / vw,
+        y: obj.top / vh
+      },
+      size: {
+        width: (obj.width * (obj.scaleX || 1)) / vw,
+        height: (obj.height * (obj.scaleY || 1)) / vh
+      },
+      rotation: obj.angle || 0,
+      draggable: true,
+      visible: true,
+      data: {}
+    }
+    if (tool == "draw") {
+      annotations.data = {
+        shapeType: "draw",
+        strokeColor: obj.stroke,
+        strokeWidth: obj.strokeWidth,
+        fillColor: obj.fill || "transparent",
+        paths: obj.path
+      };
+    }
+    else {
+      annotations.data = {
+        shapeType: tool,
+        strokeColor: obj.stroke,
+        strokeWidth: obj.strokeWidth,
+        fillColor: obj.fill,
+      }
+    }
+    return annotations;
   }
+
   useEffect(() => {
     const canvas = new fabric.Canvas(canvasRef.current, { selection: false, backgroundColor: "transparent" });
     if (!canvas) return;
@@ -70,37 +77,20 @@ function App() {
     return () => {
       canvas.dispose();
     }
-
   }, []);
+
   useEffect(() => {
     if (!url || !videoId) return;
-
-    // axios.get(`http://localhost:3000/api/annotations/${videoId}`).then(res => setAnnotations(res.data.annotations || []));
     axios.get(`http://localhost:3000/api/annotations/${videoId}`).then(res => {
       const doc = res.data.annotations;
-      if (!doc || !Array.isArray(doc.annotations)) {
+      if (!doc || !doc.annotations || doc.annotations.length === 0) {
         setAnnotations([]);
         return;
       }
       setAnnotations(doc.annotations);
     });
-
   }, [url, videoId]);
 
-
-  useEffect(() => {
-    const canvas = fabricRef.current;
-    if (!canvas) return;
-    if (tool === "pen") {
-      canvas.isDrawingMode = true;
-      const brush = new fabric.PencilBrush(canvas);
-      brush.color = "red";
-      brush.width = 3;
-      canvas.freeDrawingBrush = brush;
-    } else {
-      canvas.isDrawingMode = false;
-    }
-  }, [tool]);
   useEffect(() => {
     const canvas = fabricRef.current;
     if (!canvas) return;
@@ -109,6 +99,7 @@ function App() {
     let shape = null;
     let startX = 0;
     let startY = 0;
+
     const moveDown = (opt) => {
       if (!canvas || tool == "select") return;
       if (!activeRangeRef.current) {
@@ -117,7 +108,10 @@ function App() {
       }
       const { start, end } = activeRangeRef.current;
       const t = videoRef.current.currentTime;
-      if (t < start || t > end) return;
+      if (t < start || t > end) {
+        alert("Please draw within the selected time range");
+        return;
+      }
       videoRef.current.pause();
       isDrawingRef.current = true;
       drawing = true;
@@ -126,6 +120,7 @@ function App() {
       startX = p.x;
       startY = p.y;
       startTimeRef.current = videoRef.current.currentTime;
+
       if (tool == "rectangle") {
         shape = new fabric.Rect({
           width: 1,
@@ -168,8 +163,16 @@ function App() {
           strokeWidth: 2,
           selectable: false,
           evented: false
-
         })
+      }
+      if (tool === "draw") {
+        canvas.isDrawingMode = true;
+        const brush = new fabric.PencilBrush(canvas);
+        brush.color = "red";
+        brush.width = 3;
+        canvas.freeDrawingBrush = brush;
+      } else {
+        canvas.isDrawingMode = false;
       }
       if (shape) {
         canvas.add(shape);
@@ -201,7 +204,6 @@ function App() {
       if (tool === "rambus") {
         const absW = Math.abs(w);
         const absH = Math.abs(h);
-
         shape.set({
           left: Math.min(startX, p.x),
           top: Math.min(startY, p.y),
@@ -213,56 +215,78 @@ function App() {
           ],
         });
       }
-
+      if (tool === "draw") {
+        const points = shape.path;
+        const lastPoint = points[points.length - 1];
+        if (lastPoint[1] != 'M') {
+          shape.path.push(['L', p.x, p.y]);
+        }
+        else {
+          shape.path.push(['M', p.x, p.y]);
+        }
+        shape.set({
+          width: Math.abs(w),
+          height: Math.abs(h),
+          left: Math.min(p.x, startX),
+          top: Math.min(p.y, startY)
+        })
+      }
       canvas.requestRenderAll();
     }
+
     const mouseUp = async () => {
       drawing = false;
       const shape = currentShapeRef.current;
       if (!shape) return;
+
       shape.setCoords();
-      const endTime = videoRef.current.currentTime;
+
       if (!activeRangeRef.current) {
         canvas.remove(shape);
         currentShapeRef.current = null;
         isDrawingRef.current = false;
-
         return;
       }
       const { start, end } = activeRangeRef.current;
-      const annotations = SerializeAnnotations(
+      const annotationData = SerializeAnnotations(
         shape,
         fabricRef.current,
         start,
         end,
         tool
       );
-      if (!annotations) return;
-      const res = await axios.post("http://localhost:3000/api/annotations/create", annotations);
-      const savedAnnotation = res.data.annotations.annotations[0];
-      shape.annotationId = savedAnnotation._id;
-      renderedAnnotationRef.current.set(savedAnnotation._id, shape);
-      setAnnotations(prev => [...prev, savedAnnotation]);
+      if (!annotationData) return;
+      console.log("Saving annotation:", start, end);
+      try {
+        const res = await axios.post(
+          "http://localhost:3000/api/annotations/create",
+          { videoId, annotations: [annotationData] }
+        );
+
+        setAnnotations(res.data.annotations);
+        console.log("Fetched annotations:", res.data.annotations);
+        canvas.remove(shape);
+      } catch (error) {
+        console.error("Error saving annotation:", error);
+        canvas.remove(shape);
+      }
 
       currentShapeRef.current = null;
-
       isDrawingRef.current = false;
       canvas.discardActiveObject();
       canvas.requestRenderAll();
-    }
+    };
 
     canvas.on("mouse:down", moveDown);
     canvas.on("mouse:move", onMouseMove);
     canvas.on("mouse:up", mouseUp);
-
 
     return () => {
       canvas.off("mouse:down", moveDown);
       canvas.off("mouse:move", onMouseMove);
       canvas.off("mouse:up", mouseUp);
     }
-
-  }, [tool]);
+  }, [tool, videoId]);
 
   const renderAnnotation = (a, canvas) => {
     const vw = canvas.getWidth();
@@ -296,11 +320,13 @@ function App() {
     }
 
     if (a.data.shapeType === "rambus") {
+      const w = a.size.width * vw;
+      const h = a.size.height * vh;
       shape = new fabric.Polygon([
-        { x: 0, y: 0 },
-        { x: a.size.width * vw, y: 0 },
-        { x: a.size.width * vw, y: a.size.height * vh },
-        { x: 0, y: a.size.height * vh }
+        { x: w / 2, y: 0 },
+        { x: w, y: h / 2 },
+        { x: w / 2, y: h },
+        { x: 0, y: h / 2 }
       ], {
         left: a.position.x * vw,
         top: a.position.y * vh,
@@ -311,89 +337,60 @@ function App() {
       });
     }
 
+    if (a.data.shapeType === "draw") {
+      shape = new fabric.Path(a.data.paths, {
+        fill: a.data.fillColor,
+        stroke: a.data.strokeColor,
+        strokeWidth: a.data.strokeWidth,
+        selectable: false,
+        width: a.size.width * vw,
+        height: a.size.height * vh,
+        left: a.position.x * vw,
+        top: a.position.y * vh,
+      })
+    }
+
     if (shape) {
       shape.annotationId = a._id;
       canvas.add(shape);
     }
     return shape;
   }
-
-
-  // useEffect(() => {
-  //   const video = videoRef.current;
-  //   const canvas = fabricRef.current;
-  //   if (!video || !canvas) return;
-
-  //   const onTimeUpdate = () => {
-  //     if(isDrawingRef.current) return;
-  //     const t = video.currentTime;
-  //     renderedAnnotationRef.current.forEach((obj, id) => {
-  //       const a = annotations.find(x => x._id === id);
-  //       if (!a || t < a.startTime || t > a.endTime) {
-  //         canvas.remove(obj);
-  //         renderedAnnotationRef.current.delete(id);
-  //       }
-  //     });
-  //     annotations.forEach(a => {
-  //       if (
-  //         t >= a.startTime &&
-  //         t <= a.endTime &&
-  //         !renderedAnnotationRef.current.has(a._id)
-  //       ) {
-  //         const obj = renderAnnotation(a, canvas);
-  //         if (obj) renderedAnnotationRef.current.set(a._id, obj);
-  //       }
-  //     });
-
-  //     canvas.requestRenderAll();
-  //   };
-
-  //   video.addEventListener("timeupdate", onTimeUpdate);
-  //   return () => video.removeEventListener("timeupdate", onTimeUpdate);
-  // }, [annotations]);
-
-
-
   useEffect(() => {
     const video = videoRef.current;
     const canvas = fabricRef.current;
     if (!video || !canvas) return;
-
     const onTimeUpdate = () => {
       if (isDrawingRef.current) return;
-      const t = video.currentTime;
+      const currentTime = video.currentTime;
+      const objectsToRemove = [];
       canvas.getObjects().forEach(obj => {
         if (!obj.annotationId) return;
-
-        const a = annotations.find(x => x._id === obj.annotationId);
-        if (!a || t < a.startTime || t > a.endTime) {
-          canvas.remove(obj);
+        const annotation = annotations.find(a => a._id === obj.annotationId);
+        if (!annotation || currentTime < annotation.startTime || currentTime > annotation.endTime) {
+          objectsToRemove.push(obj);
           renderedAnnotationRef.current.delete(obj.annotationId);
         }
       });
-      annotations.forEach(a => {
+
+      objectsToRemove.forEach(obj => canvas.remove(obj));
+      annotations.forEach(annotation => {
         if (
-          t >= a.startTime &&
-          t <= a.endTime &&
-          !renderedAnnotationRef.current.has(a._id)
+          currentTime >= annotation.startTime &&
+          currentTime <= annotation.endTime &&
+          !renderedAnnotationRef.current.has(annotation._id)
         ) {
-          const obj = renderAnnotation(a, canvas);
-          if (obj) renderedAnnotationRef.current.set(a._id, obj);
+          const shape = renderAnnotation(annotation, canvas);
+          if (shape) {
+            renderedAnnotationRef.current.set(annotation._id, shape);
+          }
         }
       });
-
       canvas.requestRenderAll();
     };
-
     video.addEventListener("timeupdate", onTimeUpdate);
     return () => video.removeEventListener("timeupdate", onTimeUpdate);
   }, [annotations]);
-
-
-
-
-
-
   const handleFilechange = (e) => {
     const selectedFiles = e.target.files[0];
     if (!selectedFiles) return;
@@ -417,7 +414,6 @@ function App() {
     else {
       console.log("there is an error while uploading");
     }
-
   }
   useEffect(() => {
     if (!fabricRef.current || !videoRef.current) return;
@@ -439,19 +435,24 @@ function App() {
       window.removeEventListener("resize", resizeCanvas);
     };
   }, []);
-
-
-
+useEffect(()=>{
+    if(!videoRef.current) return;
+    const video = videoRef.current;
+    const handleTimeUpdate = ()=>{
+        console.log("current time:",video.currentTime);
+    } 
+    video.addEventListener("timeupdate",handleTimeUpdate);
+    return ()=>{
+        video.removeEventListener("timeupdate",handleTimeUpdate);
+    }
+})
   return (
-
     <div className='flex gap-4 top-4'>
       <div className="gap-2">
         <input type="file" ref={fileRef} accept="video/*" style={{ display: "none" }} onChange={handleFilechange} />
         <button className="bg-blue-500 text-white px-4 py-2 rounded-md h-12 mt-2 mr-2" onClick={() => fileRef.current.click()}>Add video</button>
         <button className="bg-blue-500 text-white px-4 py-2 rounded-md h-12 mt-2" onClick={handleUpload}>upload</button>
-
       </div>
-
       <div className='w-full max-w-[900px] h-[600px] mt-12 '>
         <div className="p-6">
           <div className="mb-4 flex gap-2">
@@ -459,7 +460,7 @@ function App() {
             <button onClick={() => setTool("rectangle")}>Rectangle</button>
             <button onClick={() => setTool("circle")}>Circle</button>
             <button onClick={() => setTool("rambus")}>Rhombus</button>
-            <button onClick={() => setTool("pen")}>Pen</button>
+            <button onClick={() => setTool("draw")}>Draw</button>
           </div>
           <div
             className="relative"
@@ -475,7 +476,6 @@ function App() {
               ref={canvasRef}
               className="absolute top-0 left-0 z-10"
             />
-
           </div>
           <div className='flex mt-4 gap-2 overflow-x-auto'>
             {
@@ -485,38 +485,30 @@ function App() {
                     start: t.start,
                     end: t.end
                   };
+                  console.log("Active range set:", activeRangeRef.current);
                   const canvas = fabricRef.current;
                   renderedAnnotationRef.current.forEach(obj => canvas.remove(obj));
                   renderedAnnotationRef.current.clear();
                   canvas.requestRenderAll();
-
                   videoRef.current.currentTime = t.start;
                   videoRef.current.play().catch(() => { });
                 }}
-                  className='w-18 h-18'>
-                  <img src={t.url} />
+                  className='w-18 h-18 cursor-pointer'>
+                  <img src={t.url} alt={`${t.start}s - ${t.end}s`} />
                   <p>{t.start}s - {t.end}s</p>
-
                 </div>
               ))
             }
-
-
           </div>
-
         </div>
-
-
-
-
       </div>
     </div>
-
-
   )
 }
 
 export default App
+
+
 
 
 

@@ -24,14 +24,15 @@ const annotationSchema = new mongoose.Schema({
     videoId:{
         type:mongoose.Schema.Types.ObjectId,
         ref:"video",
-        required:true
+        required:true,
+        unique:true
     },
     annotations :[
         {
             _id:{type:mongoose.Schema.Types.ObjectId},
             type:{
                 type:String,
-                enum:["shape","draw","text","emoji","comment","note","highlight"],
+                enum:["rectangle","circle","arrow","line","square","rambus"],
                 required:true
             },
             startTime:{
@@ -133,4 +134,6 @@ const annotationSchema = new mongoose.Schema({
 export const userModel = new mongoose.model("user",userSchema);
 export const annotationModel = new mongoose.model("annotation",annotationSchema);
 export const videoModel = new mongoose.model("video",videoSchema);
+
+
 
