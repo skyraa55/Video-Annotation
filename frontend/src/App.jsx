@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { useState, useEffect } from 'react'
 import { useRef } from 'react';
@@ -33,7 +34,7 @@ function App() {
     const vw = canvas.getWidth();
     const vh = canvas.getHeight();
     const annotations = {
-      type: tool == "draw" ? "draw" : "shape",
+      type: tool,
       startTime,
       endTime,
       position: {
@@ -64,6 +65,9 @@ function App() {
         strokeColor: obj.stroke,
         strokeWidth: obj.strokeWidth,
         fillColor: obj.fill,
+        text: obj.text || null,
+        fontSize: obj.fontSize || null,
+        imageUrl: obj.imageUrl || null,
       }
     }
     return annotations;
@@ -165,6 +169,44 @@ function App() {
           evented: false
         })
       }
+      if (tool === "text") {
+        const text = new fabric.IText("Enter text", {
+          left: startX,
+          top: startY,
+          fill: "red",
+          fontSize: 20,
+          selectable: true,
+        });
+        canvas.add(text);
+        currentShapeRef.current = text;
+      }
+      if (tool === "image") {
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = "image/*";
+        input.onchange = (e) => {
+          const file = e.target.files[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = (f) => {
+            fabric.Image.fromURL(f.result, img => {
+              img.set({
+                left: startX,
+                top: startY,
+                scaleX: 0.5,
+                scaleY: 0.5,
+                selectable: true
+              });
+              img.imageUrl = f.result;
+              canvas.add(img);
+              currentShapeRef.current = img;
+            })
+          }
+          reader.readAsDataURL(file);
+        };
+        input.click();
+
+      }
       if (tool === "draw") {
         canvas.isDrawingMode = true;
         const brush = new fabric.PencilBrush(canvas);
@@ -262,7 +304,6 @@ function App() {
           "http://localhost:3000/api/annotations/create",
           { videoId, annotations: [annotationData] }
         );
-
         setAnnotations(res.data.annotations);
         console.log("Fetched annotations:", res.data.annotations);
         canvas.remove(shape);
@@ -349,25 +390,64 @@ function App() {
         top: a.position.y * vh,
       })
     }
-
+    if (a.data.shapeType === "text") {
+      shape = new fabric.IText(a.data.text, {
+        left: a.position.x * vw,
+        top: a.position.y * vh,
+        fill: a.data.fillColor,
+        fontSize: a.data.fontSize,
+        selectable: false
+      });
+    }
+    if (a.data.shapeType === "image") {
+      fabric.Image.fromURL(a.data.imageUrl, (img) => {
+        img.set({
+          left: a.position.x * vw,
+          top: a.position.y * vh,
+          scaleX: a.size.width,
+          scaleY: a.size.height,
+          selectable: false
+        });
+        img.annotationId = a._id;
+        canvas.add(img);
+      });
+      return;
+    }
     if (shape) {
       shape.annotationId = a._id;
       canvas.add(shape);
     }
     return shape;
   }
+
   useEffect(() => {
     const video = videoRef.current;
     const canvas = fabricRef.current;
     if (!video || !canvas) return;
+
     const onTimeUpdate = () => {
       if (isDrawingRef.current) return;
       const currentTime = video.currentTime;
+      let currentRange = null;
+      for (const thumbnail of thumbnails) {
+        if (currentTime >= thumbnail.start && currentTime <= thumbnail.end) {
+          currentRange = { start: thumbnail.start, end: thumbnail.end };
+          break;
+        }
+      }
       const objectsToRemove = [];
       canvas.getObjects().forEach(obj => {
         if (!obj.annotationId) return;
         const annotation = annotations.find(a => a._id === obj.annotationId);
-        if (!annotation || currentTime < annotation.startTime || currentTime > annotation.endTime) {
+        const shouldRemove = !annotation ||
+          currentTime < annotation.startTime ||
+          currentTime > annotation.endTime ||
+          (currentRange && (
+            Math.abs(annotation.startTime - currentRange.start) > 0.1 ||
+            Math.abs(annotation.endTime - currentRange.end) > 0.1
+          ));
+
+        if (shouldRemove) {
           objectsToRemove.push(obj);
           renderedAnnotationRef.current.delete(obj.annotationId);
         }
@@ -375,11 +455,11 @@ function App() {
 
       objectsToRemove.forEach(obj => canvas.remove(obj));
       annotations.forEach(annotation => {
-        if (
-          currentTime >= annotation.startTime &&
-          currentTime <= annotation.endTime &&
-          !renderedAnnotationRef.current.has(annotation._id)
-        ) {
+        const belongsToCurrentRange = currentRange &&
+          Math.abs(annotation.startTime - currentRange.start) < 0.1 &&
+          Math.abs(annotation.endTime - currentRange.end) < 0.1;
+        const isInTimeRange = currentTime >= annotation.startTime && currentTime <= annotation.endTime;
+        if (belongsToCurrentRange && isInTimeRange && !renderedAnnotationRef.current.has(annotation._id)) {
           const shape = renderAnnotation(annotation, canvas);
           if (shape) {
             renderedAnnotationRef.current.set(annotation._id, shape);
@@ -390,7 +470,7 @@ function App() {
     };
     video.addEventListener("timeupdate", onTimeUpdate);
     return () => video.removeEventListener("timeupdate", onTimeUpdate);
-  }, [annotations]);
+  }, [annotations, thumbnails]);
   const handleFilechange = (e) => {
     const selectedFiles = e.target.files[0];
     if (!selectedFiles) return;
@@ -435,17 +515,6 @@ function App() {
       window.removeEventListener("resize", resizeCanvas);
     };
   }, []);
-useEffect(()=>{
-    if(!videoRef.current) return;
-    const video = videoRef.current;
-    const handleTimeUpdate = ()=>{
-        console.log("current time:",video.currentTime);
-    } 
-    video.addEventListener("timeupdate",handleTimeUpdate);
-    return ()=>{
-        video.removeEventListener("timeupdate",handleTimeUpdate);
-    }
-})
   return (
     <div className='flex gap-4 top-4'>
       <div className="gap-2">
@@ -461,6 +530,8 @@ useEffect(()=>{
             <button onClick={() => setTool("circle")}>Circle</button>
             <button onClick={() => setTool("rambus")}>Rhombus</button>
             <button onClick={() => setTool("draw")}>Draw</button>
+            <button onClick={() => setTool("text")}>Text</button>
+            <button onClick={() => setTool("image")}>Image</button>
           </div>
           <div
             className="relative"
@@ -507,9 +578,3 @@ useEffect(()=>{
 }
 
 export default App
-
-
-
-
-
-

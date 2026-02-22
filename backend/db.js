@@ -32,7 +32,7 @@ const annotationSchema = new mongoose.Schema({
             _id:{type:mongoose.Schema.Types.ObjectId},
             type:{
                 type:String,
-                enum:["rectangle","circle","arrow","line","square","rambus"],
+                enum:["rectangle","circle","arrow","line","square","rambus","image","text"],
                 required:true
             },
             startTime:{
@@ -65,7 +65,7 @@ const annotationSchema = new mongoose.Schema({
                     }
                 ],
                 // shapes
-                shapeType:{type:String,enum:["rectangle","circle","arrow","line","square"]},
+                shapeType:{type:String,enum:["rectangle","circle","arrow","line","square","image","text"]},
                 strokeColor:String,
                 fillColor:String,
                 strokeWidth:Number,
