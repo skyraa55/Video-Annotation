@@ -20,116 +20,205 @@ const videoSchema = new mongoose.Schema({
 
 },{ timestamps:true });
 
+// const annotationSchema = new mongoose.Schema({
+//     videoId:{
+//         type:mongoose.Schema.Types.ObjectId,
+//         ref:"video",
+//         required:true,
+//         unique:true
+//     },
+//     annotations :[
+//         {
+//             _id:{type:mongoose.Schema.Types.ObjectId},
+//             type:{
+//                 type:String,
+//                 enum:["rectangle","circle","arrow","line","square","rambus","image","text","draw"],
+//                 required:true
+//             },
+//             startTime:{
+//                 type:Number,
+//                 required:true
+//             },
+//             endTime:{
+//                 type:Number,
+//             },
+//             position:{
+//                 x:Number,
+//                 y:Number
+//             },
+//             size:{
+//                 width:Number,
+//                 height:Number
+//             },
+//             rotation:{
+//                 type:Number,
+//                 default:0
+//             },
+//             data:{
+//                 paths:[
+//                     {
+//                         points:[{x:Number,y:Number}],
+//                         color:String,
+//                         strokeWidth:Number,
+//                         opacity:Number
+
+//                     }
+//                 ],
+//                 // shapes
+//                 shapeType:{type:String,enum:["rectangle","circle","arrow","line","square","image","text","draw"]},
+//                 strokeColor:String,
+//                 fillColor:String,
+//                 strokeWidth:Number,
+//                 // text and emoji
+//                 text:String,
+//                 fontSize:Number,
+//                 fontFamily:String,
+//                 textColor:String,
+//                 backgroundColor:String,
+//                 emoji:String,
+//                 // comments
+//                 comment:{
+//                     text:String,
+//                     replies:[
+//                         {
+//                             userId:{type:mongoose.Schema.Types.ObjectId,ref:"user"},
+//                             text:String,
+//                             createdAt:{type:Date,default:Date.now}
+
+//                         }
+//                     ]
+//                 },
+//                 // notes
+//                 notes:{
+//                     pages:[
+//                         {
+//                             title:String,
+//                             content:String,
+//                             textColor:String,
+//                             backgroundColor:String,
+//                             image:[
+//                                 {
+//                                     url:String,
+//                                     width:Number,
+//                                     height:Number
+//                                 }
+//                             ]
+
+//                         }
+//                     ]
+//                 },
+//                 // highlightcolor 
+//                 highlightColor:{type:String},
+//         },
+//         draggable:{
+//             type:Boolean,
+//             default:true
+//         },
+//         visible:{
+//             type:Boolean,
+//             default:true
+//         },
+//         createdAt:{
+//             type:Date,
+//             default:Date.now
+//         }
+
+
+
+
+//         }
+//     ]
+
+// })
+
 const annotationSchema = new mongoose.Schema({
-    videoId:{
-        type:mongoose.Schema.Types.ObjectId,
-        ref:"video",
-        required:true,
-        unique:true
-    },
-    annotations :[
-        {
-            _id:{type:mongoose.Schema.Types.ObjectId},
-            type:{
-                type:String,
-                enum:["rectangle","circle","arrow","line","square","rambus","image","text"],
-                required:true
-            },
-            startTime:{
-                type:Number,
-                required:true
-            },
-            endTime:{
-                type:Number,
-            },
-            position:{
-                x:Number,
-                y:Number
-            },
-            size:{
-                width:Number,
-                height:Number
-            },
-            rotation:{
-                type:Number,
-                default:0
-            },
-            data:{
-                paths:[
-                    {
-                        points:[{x:Number,y:Number}],
-                        color:String,
-                        strokeWidth:Number,
-                        opacity:Number
+  videoId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "video",
+    required: true,
+    unique: true
+  },
 
-                    }
-                ],
-                // shapes
-                shapeType:{type:String,enum:["rectangle","circle","arrow","line","square","image","text"]},
-                strokeColor:String,
-                fillColor:String,
-                strokeWidth:Number,
-                // text and emoji
-                text:String,
-                fontSize:Number,
-                fontFamily:String,
-                textColor:String,
-                backgroundColor:String,
-                emoji:String,
-                // comments
-                comment:{
-                    text:String,
-                    replies:[
-                        {
-                            userId:{type:mongoose.Schema.Types.ObjectId,ref:"user"},
-                            text:String,
-                            createdAt:{type:Date,default:Date.now}
+  annotations: [
+    {
+      type: {
+        type: String,
+        enum: [
+          "rectangle",
+          "circle",
+          "rambus",
+          "text",
+          "draw"
+        ],
+        required: true
+      },
 
-                        }
-                    ]
-                },
-                // notes
-                notes:{
-                    pages:[
-                        {
-                            title:String,
-                            content:String,
-                            textColor:String,
-                            backgroundColor:String,
-                            image:[
-                                {
-                                    url:String,
-                                    width:Number,
-                                    height:Number
-                                }
-                            ]
+      startTime: {
+        type: Number,
+        required: true
+      },
 
-                        }
-                    ]
-                },
-                // highlightcolor 
-                highlightColor:{type:String},
+      endTime: {
+        type: Number,
+        required: true
+      },
+
+      position: {
+        x: Number,
+        y: Number
+      },
+
+      size: {
+        width: Number,
+        height: Number
+      },
+
+      rotation: {
+        type: Number,
+        default: 0
+      },
+
+      data: {
+        shapeType: {
+          type: String,
+          enum: [
+            "rectangle",
+            "circle",
+            "rambus",
+            "text",
+            "draw"
+          ]
         },
-        draggable:{
-            type:Boolean,
-            default:true
-        },
-        visible:{
-            type:Boolean,
-            default:true
-        },
-        createdAt:{
-            type:Date,
-            default:Date.now
-        }
 
+        strokeColor: String,
+        fillColor: String,
+        strokeWidth: Number,
 
+        text: String,
+        fontSize: Number,
 
+        imageUrl: String,
 
-        }
-    ]
+        paths: mongoose.Schema.Types.Mixed
+      },
 
-})
+      draggable: {
+        type: Boolean,
+        default: true
+      },
+
+      visible: {
+        type: Boolean,
+        default: true
+      },
+
+      createdAt: {
+        type: Date,
+        default: Date.now
+      }
+    }
+  ]
+});
 
 export const userModel = new mongoose.model("user",userSchema);
 export const annotationModel = new mongoose.model("annotation",annotationSchema);

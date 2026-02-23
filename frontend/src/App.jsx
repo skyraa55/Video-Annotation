@@ -170,43 +170,85 @@ function App() {
         })
       }
       if (tool === "text") {
-        const text = new fabric.IText("Enter text", {
-          left: startX,
-          top: startY,
-          fill: "red",
-          fontSize: 20,
-          selectable: true,
-        });
-        canvas.add(text);
-        currentShapeRef.current = text;
-      }
-      if (tool === "image") {
-        const input = document.createElement("input");
-        input.type = "file";
-        input.accept = "image/*";
-        input.onchange = (e) => {
-          const file = e.target.files[0];
-          if (!file) return;
-          const reader = new FileReader();
-          reader.onload = (f) => {
-            fabric.Image.fromURL(f.result, img => {
-              img.set({
-                left: startX,
-                top: startY,
-                scaleX: 0.5,
-                scaleY: 0.5,
-                selectable: true
-              });
-              img.imageUrl = f.result;
-              canvas.add(img);
-              currentShapeRef.current = img;
-            })
-          }
-          reader.readAsDataURL(file);
-        };
-        input.click();
+  const { start, end } = activeRangeRef.current;
+  const text = new fabric.IText("Enter text", {
+    left: startX,
+    top: startY,
+    fill: "red",
+    fontSize: 20,
+    selectable: true,
+  });
 
-      }
+  canvas.add(text);
+  canvas.setActiveObject(text);
+  text.enterEditing();
+  text.selectAll();
+  text.on("editing:exited", async () => {
+    if (!text.text || text.text.trim() === "") {
+      canvas.remove(text);
+      return;
+    }
+    const annotationData = SerializeAnnotations(
+      text,
+      canvas,
+      start,
+      end,
+      "text"
+    );
+    try {
+      const res = await axios.post(
+        "http://localhost:3000/api/annotations/create",
+        { videoId, annotations: [annotationData] }
+      );
+      setAnnotations(res.data.annotations);
+      canvas.remove(text);
+    } catch (err) {
+      console.error(err);
+      canvas.remove(text);
+    }
+  });
+
+  return;
+}
+      // if (tool === "image") {
+      //   const input = document.createElement("input");
+      //   input.type = "file";
+      //   input.accept = "image/*";
+      //   input.onchange = (e) => {
+      //     const file = e.target.files[0];
+      //     if (!file) return;
+      //     const reader = new FileReader();
+      //     reader.onload = (f) => {
+      //       fabric.Image.fromURL(f.result, async (img) => {
+      //         img.set({
+      //           left: startX,
+      //           top: startY,
+      //           scaleX: 0.5,
+      //           scaleY: 0.5,
+      //           selectable: true
+      //         });
+      //         img.imageUrl = f.result;
+      //         canvas.add(img);
+      //         const { start, end } = activeRangeRef.current;
+      //         const annotationData = SerializeAnnotations(
+      //           img,
+      //           canvas,
+      //           start,
+      //           end,
+      //           "image"
+      //         );
+      //         const res = await axios.post(
+      //           "http://localhost:3000/api/annotations/create",
+      //           { videoId, annotations: [annotationData] }
+      //         );
+      //         setAnnotations(res.data.annotations);
+      //         canvas.remove(img);
+      //       });
+      //     }
+      //     reader.readAsDataURL(file);
+      //   };
+      //   input.click();
+      // }
       if (tool === "draw") {
         canvas.isDrawingMode = true;
         const brush = new fabric.PencilBrush(canvas);
@@ -399,20 +441,20 @@ function App() {
         selectable: false
       });
     }
-    if (a.data.shapeType === "image") {
-      fabric.Image.fromURL(a.data.imageUrl, (img) => {
-        img.set({
-          left: a.position.x * vw,
-          top: a.position.y * vh,
-          scaleX: a.size.width,
-          scaleY: a.size.height,
-          selectable: false
-        });
-        img.annotationId = a._id;
-        canvas.add(img);
-      });
-      return;
-    }
+    // if (a.data.shapeType === "image") {
+    //   fabric.Image.fromURL(a.data.imageUrl, (img) => {
+    //     img.set({
+    //       left: a.position.x * vw,
+    //       top: a.position.y * vh,
+    //        scaleX: (a.size.width * vw) / img.width,
+    //       scaleY: (a.size.height * vh) / img.height,
+    //       selectable: false
+    //     });
+    //     img.annotationId = a._id;
+    //     canvas.add(img);
+    //   });
+    //   return;
+    // }
     if (shape) {
       shape.annotationId = a._id;
       canvas.add(shape);
