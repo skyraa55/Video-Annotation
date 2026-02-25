@@ -24,6 +24,9 @@ function App() {
   const [videoId, setVideoId] = useState(null);
   const renderedAnnotationRef = useRef(new Map());
   const isDrawingRef = useRef(false);
+  const [showNotes,setShowNotes] = useState(false);
+  const [noteContent,setNoteContent] = useState("");
+  const [currentNoteRange,setCurrentNoteRange] = useState(null);
 
   const SerializeAnnotations = (shape, canvas, startTime, endTime, tool) => {
     if (!videoId) {
@@ -50,7 +53,7 @@ function App() {
       visible: true,
       data: {}
     }
-    if (tool == "draw") {
+    if (tool == "draw"){
       annotations.data = {
         shapeType: "draw",
         strokeColor: obj.stroke,
@@ -175,17 +178,13 @@ function App() {
           alert("Select a time range first");
           return;
         }
-
         const { start, end } = activeRangeRef.current;
         const t = videoRef.current.currentTime;
-
         if (t < start || t > end) {
           alert("Please add text within selected time range");
           return;
         }
-
         videoRef.current.pause();
-
         const text = new fabric.IText("", {
           left: startX,
           top: startY,
@@ -194,21 +193,17 @@ function App() {
           selectable: true,
           editable: true,
         });
-
         canvas.add(text);
         canvas.setActiveObject(text);
         text.enterEditing();
         text.hiddenTextarea?.focus();
-
         isDrawingRef.current = true;
-
         text.on("editing:exited", async () => {
           if (!text.text.trim()) {
             canvas.remove(text);
             isDrawingRef.current = false;
             return;
           }
-
           const annotationData = SerializeAnnotations(
             text,
             fabricRef.current,
@@ -216,14 +211,13 @@ function App() {
             end,
             "text"
           );
-
           try {
             const res = await axios.post(
               "http://localhost:3000/api/annotations/create",
               { videoId, annotations: [annotationData] }
             );
 
-            canvas.remove(text); // 🔥 IMPORTANT
+            canvas.remove(text); 
             setAnnotations(res.data.annotations);
 
           } catch (error) {
@@ -245,12 +239,11 @@ function App() {
       } else {
         canvas.isDrawingMode = false;
       }
-      if (shape) {
+      if (shape){
         canvas.add(shape);
         currentShapeRef.current = shape;
       }
     }
-
     const onMouseMove = (opt) => {
       if (!drawing || !shape) return;
       const p = canvas.getViewportPoint(opt.e);
@@ -304,7 +297,6 @@ function App() {
       }
       canvas.requestRenderAll();
     }
-
     const mouseUp = async () => {
       if (tool === "text") return;
       drawing = false;
@@ -449,13 +441,12 @@ function App() {
         if (!obj.annotationId) return;
         const annotation = annotations.find(a => a._id === obj.annotationId);
         const shouldRemove = !annotation ||
-          currentTime < annotation.startTime ||
-          currentTime > annotation.endTime ||
-          (currentRange && (
+        currentTime < annotation.startTime ||
+        currentTime > annotation.endTime ||
+        (currentRange && (
             Math.abs(annotation.startTime - currentRange.start) > 0.1 ||
             Math.abs(annotation.endTime - currentRange.end) > 0.1
           ));
-
         if (shouldRemove) {
           objectsToRemove.push(obj);
           renderedAnnotationRef.current.delete(obj.annotationId);
@@ -463,12 +454,6 @@ function App() {
       });
       objectsToRemove.forEach(obj => canvas.remove(obj));
       annotations.forEach(annotation => {
-
-        // const belongsToCurrentRange = currentRange &&
-        //  annotation.startTime >= currentRange.start &&
-        //   annotation.endTime <= currentRange.end ;
-        // const isInTimeRange = currentTime >= annotation.startTime && currentTime <= annotation.endTime;
-        // if (belongsToCurrentRange && isInTimeRange && !renderedAnnotationRef.current.has(annotation._id)) {
         const isInTimeRange =
           currentTime >= annotation.startTime &&
           currentTime <= annotation.endTime;
@@ -509,6 +494,23 @@ function App() {
       console.log("there is an error while uploading");
     }
   }
+  const handleNotesClick = () => {
+    if(!activeRangeRef){
+      alert("select the time period");
+      return;
+    }
+    const { startTime,endTime } = activeRangeRef.current;
+    setCurrentNoteRange({ start,end });
+    setShowNotes(true);
+    axios.get(`http://localhost:3000/api/annotations/getNotes/${videoId}`,{ startTime,endTime }).then(res => {
+      if(res.data){
+        setNoteContent(res.data);
+      }
+      else{
+        setNoteContent("");
+      }
+    });
+  }
   useEffect(() => {
     if (!fabricRef.current || !videoRef.current) return;
     const canvas = fabricRef.current;
@@ -545,6 +547,7 @@ function App() {
             <button onClick={() => setTool("rambus")}>Rhombus</button>
             <button onClick={() => setTool("draw")}>Draw</button>
             <button onClick={() => setTool("text")}>Text</button>
+            <button onClick={handleNotesClick}>Notes</button>
           </div>
           <div
             className="relative"
@@ -569,6 +572,14 @@ function App() {
                     start: t.start,
                     end: t.end
                   };
+                  const existingnotes = notes.find(n => n.startTime === t.start && n.endTime === t.end);
+                  setActiveNotes(existingnotes || {
+                    startTime:t.start,
+                    endTime:t.end,
+                    content:"",
+                    images:[]
+                  });
+                  setShowNotes(false);
                   console.log("Active range set:", activeRangeRef.current);
                   const canvas = fabricRef.current;
                   renderedAnnotationRef.current.forEach(obj => canvas.remove(obj));

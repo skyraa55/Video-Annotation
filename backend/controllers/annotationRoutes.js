@@ -1,5 +1,6 @@
 import express from "express";
 import { annotationModel } from "../db.js";
+import { notesModel } from "../db.js";
 const router = express.Router();
 
 // router.post("/createAnnotation",async (req,res)=>{
@@ -66,4 +67,27 @@ router.get("/time/:videoId",async (req,res)=>{
         console.log("catch block error");
     }
 });
+router.get("/getNotes/:videoId",async (req,res) => {
+    const { startTime,endTime } = req.body;
+    const note = await notesModel.find({
+        videoId:req.params.videoId,
+        startTime:startTime,
+        endTime:endTime
+    });
+    res.json(note || null);
+
+});
+router.post("/saveNotes",async (req,res) => {
+    const { videoId,startTime,endTime,content } = req.body;
+    let note = await notesModel.find({ videoId,startTime,endTime,content });
+    if(note){
+        note.content = content;
+        await note.save();
+    }
+    else{
+        note = await notesModel.create({ videoId,startTime,endTime,content });
+    }
+    res.json(note);
+
+})
 export default router;
