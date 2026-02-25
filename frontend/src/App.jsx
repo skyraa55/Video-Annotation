@@ -76,6 +76,8 @@ function App() {
   useEffect(() => {
     const canvas = new fabric.Canvas(canvasRef.current, { selection: false, backgroundColor: "transparent" });
     if (!canvas) return;
+    canvas.selection = false;
+    canvas.isDrawingMode = tool === "draw";
     canvas.setDimensions({ width: 900, height: 600 });
     fabricRef.current = canvas;
     return () => {
@@ -98,12 +100,10 @@ function App() {
   useEffect(() => {
     const canvas = fabricRef.current;
     if (!canvas) return;
-
     let drawing = false;
     let shape = null;
     let startX = 0;
     let startY = 0;
-
     const moveDown = (opt) => {
       if (!canvas || tool == "select") return;
       if (!activeRangeRef.current) {
@@ -118,13 +118,14 @@ function App() {
       }
       videoRef.current.pause();
       isDrawingRef.current = true;
-      drawing = true;
-      canvas.discardActiveObject();
+      if (tool !== "text") {
+        drawing = true;
+        canvas.discardActiveObject();
+      }
       const p = canvas.getViewportPoint(opt.e);
       startX = p.x;
       startY = p.y;
       startTimeRef.current = videoRef.current.currentTime;
-
       if (tool == "rectangle") {
         shape = new fabric.Rect({
           width: 1,
@@ -170,85 +171,71 @@ function App() {
         })
       }
       if (tool === "text") {
-  const { start, end } = activeRangeRef.current;
-  const text = new fabric.IText("Enter text", {
-    left: startX,
-    top: startY,
-    fill: "red",
-    fontSize: 20,
-    selectable: true,
-  });
+        if (!activeRangeRef.current) {
+          alert("Select a time range first");
+          return;
+        }
 
-  canvas.add(text);
-  canvas.setActiveObject(text);
-  text.enterEditing();
-  text.selectAll();
-  text.on("editing:exited", async () => {
-    if (!text.text || text.text.trim() === "") {
-      canvas.remove(text);
-      return;
-    }
-    const annotationData = SerializeAnnotations(
-      text,
-      canvas,
-      start,
-      end,
-      "text"
-    );
-    try {
-      const res = await axios.post(
-        "http://localhost:3000/api/annotations/create",
-        { videoId, annotations: [annotationData] }
-      );
-      setAnnotations(res.data.annotations);
-      canvas.remove(text);
-    } catch (err) {
-      console.error(err);
-      canvas.remove(text);
-    }
-  });
+        const { start, end } = activeRangeRef.current;
+        const t = videoRef.current.currentTime;
 
-  return;
-}
-      // if (tool === "image") {
-      //   const input = document.createElement("input");
-      //   input.type = "file";
-      //   input.accept = "image/*";
-      //   input.onchange = (e) => {
-      //     const file = e.target.files[0];
-      //     if (!file) return;
-      //     const reader = new FileReader();
-      //     reader.onload = (f) => {
-      //       fabric.Image.fromURL(f.result, async (img) => {
-      //         img.set({
-      //           left: startX,
-      //           top: startY,
-      //           scaleX: 0.5,
-      //           scaleY: 0.5,
-      //           selectable: true
-      //         });
-      //         img.imageUrl = f.result;
-      //         canvas.add(img);
-      //         const { start, end } = activeRangeRef.current;
-      //         const annotationData = SerializeAnnotations(
-      //           img,
-      //           canvas,
-      //           start,
-      //           end,
-      //           "image"
-      //         );
-      //         const res = await axios.post(
-      //           "http://localhost:3000/api/annotations/create",
-      //           { videoId, annotations: [annotationData] }
-      //         );
-      //         setAnnotations(res.data.annotations);
-      //         canvas.remove(img);
-      //       });
-      //     }
-      //     reader.readAsDataURL(file);
-      //   };
-      //   input.click();
-      // }
+        if (t < start || t > end) {
+          alert("Please add text within selected time range");
+          return;
+        }
+
+        videoRef.current.pause();
+
+        const text = new fabric.IText("", {
+          left: startX,
+          top: startY,
+          fill: "red",
+          fontSize: 22,
+          selectable: true,
+          editable: true,
+        });
+
+        canvas.add(text);
+        canvas.setActiveObject(text);
+        text.enterEditing();
+        text.hiddenTextarea?.focus();
+
+        isDrawingRef.current = true;
+
+        text.on("editing:exited", async () => {
+          if (!text.text.trim()) {
+            canvas.remove(text);
+            isDrawingRef.current = false;
+            return;
+          }
+
+          const annotationData = SerializeAnnotations(
+            text,
+            fabricRef.current,
+            start,
+            end,
+            "text"
+          );
+
+          try {
+            const res = await axios.post(
+              "http://localhost:3000/api/annotations/create",
+              { videoId, annotations: [annotationData] }
+            );
+
+            canvas.remove(text); // 🔥 IMPORTANT
+            setAnnotations(res.data.annotations);
+
+          } catch (error) {
+            console.error("Error saving text:", error);
+            canvas.remove(text);
+          }
+
+          isDrawingRef.current = false;
+        });
+
+        return;
+      }
       if (tool === "draw") {
         canvas.isDrawingMode = true;
         const brush = new fabric.PencilBrush(canvas);
@@ -319,12 +306,11 @@ function App() {
     }
 
     const mouseUp = async () => {
+      if (tool === "text") return;
       drawing = false;
       const shape = currentShapeRef.current;
       if (!shape) return;
-
       shape.setCoords();
-
       if (!activeRangeRef.current) {
         canvas.remove(shape);
         currentShapeRef.current = null;
@@ -353,29 +339,24 @@ function App() {
         console.error("Error saving annotation:", error);
         canvas.remove(shape);
       }
-
       currentShapeRef.current = null;
       isDrawingRef.current = false;
       canvas.discardActiveObject();
       canvas.requestRenderAll();
     };
-
     canvas.on("mouse:down", moveDown);
     canvas.on("mouse:move", onMouseMove);
     canvas.on("mouse:up", mouseUp);
-
     return () => {
       canvas.off("mouse:down", moveDown);
       canvas.off("mouse:move", onMouseMove);
       canvas.off("mouse:up", mouseUp);
     }
   }, [tool, videoId]);
-
   const renderAnnotation = (a, canvas) => {
     const vw = canvas.getWidth();
     const vh = canvas.getHeight();
     let shape;
-
     if (a.data.shapeType === "rectangle") {
       shape = new fabric.Rect({
         left: a.position.x * vw,
@@ -388,7 +369,6 @@ function App() {
         selectable: false
       });
     }
-
     if (a.data.shapeType === "circle") {
       shape = new fabric.Ellipse({
         left: a.position.x * vw,
@@ -438,23 +418,11 @@ function App() {
         top: a.position.y * vh,
         fill: a.data.fillColor,
         fontSize: a.data.fontSize,
-        selectable: false
+        selectable: tool === "select",
+        evented: true,
+        editable: false
       });
     }
-    // if (a.data.shapeType === "image") {
-    //   fabric.Image.fromURL(a.data.imageUrl, (img) => {
-    //     img.set({
-    //       left: a.position.x * vw,
-    //       top: a.position.y * vh,
-    //        scaleX: (a.size.width * vw) / img.width,
-    //       scaleY: (a.size.height * vh) / img.height,
-    //       selectable: false
-    //     });
-    //     img.annotationId = a._id;
-    //     canvas.add(img);
-    //   });
-    //   return;
-    // }
     if (shape) {
       shape.annotationId = a._id;
       canvas.add(shape);
@@ -466,7 +434,6 @@ function App() {
     const video = videoRef.current;
     const canvas = fabricRef.current;
     if (!video || !canvas) return;
-
     const onTimeUpdate = () => {
       if (isDrawingRef.current) return;
       const currentTime = video.currentTime;
@@ -494,14 +461,19 @@ function App() {
           renderedAnnotationRef.current.delete(obj.annotationId);
         }
       });
-
       objectsToRemove.forEach(obj => canvas.remove(obj));
       annotations.forEach(annotation => {
-        const belongsToCurrentRange = currentRange &&
-          Math.abs(annotation.startTime - currentRange.start) < 0.1 &&
-          Math.abs(annotation.endTime - currentRange.end) < 0.1;
-        const isInTimeRange = currentTime >= annotation.startTime && currentTime <= annotation.endTime;
-        if (belongsToCurrentRange && isInTimeRange && !renderedAnnotationRef.current.has(annotation._id)) {
+
+        // const belongsToCurrentRange = currentRange &&
+        //  annotation.startTime >= currentRange.start &&
+        //   annotation.endTime <= currentRange.end ;
+        // const isInTimeRange = currentTime >= annotation.startTime && currentTime <= annotation.endTime;
+        // if (belongsToCurrentRange && isInTimeRange && !renderedAnnotationRef.current.has(annotation._id)) {
+        const isInTimeRange =
+          currentTime >= annotation.startTime &&
+          currentTime <= annotation.endTime;
+        if (isInTimeRange &&
+          !renderedAnnotationRef.current.has(annotation._id)) {
           const shape = renderAnnotation(annotation, canvas);
           if (shape) {
             renderedAnnotationRef.current.set(annotation._id, shape);
@@ -573,7 +545,6 @@ function App() {
             <button onClick={() => setTool("rambus")}>Rhombus</button>
             <button onClick={() => setTool("draw")}>Draw</button>
             <button onClick={() => setTool("text")}>Text</button>
-            <button onClick={() => setTool("image")}>Image</button>
           </div>
           <div
             className="relative"
