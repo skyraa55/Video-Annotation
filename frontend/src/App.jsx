@@ -24,8 +24,10 @@ function App() {
   const [videoId, setVideoId] = useState(null);
   const renderedAnnotationRef = useRef(new Map());
   const isDrawingRef = useRef(false);
+  const [allNotes, setAllNotes] = useState([]);
+  const [notes, setNotes] = useState([]);
   const [showNotes, setShowNotes] = useState(false);
-  const [noteContent, setNoteContent] = useState("");
+  const [activeNotes, setActiveNotes] = useState({ start: null, end: null, content: "" });
   const [currentNoteRange, setCurrentNoteRange] = useState(null);
 
   const SerializeAnnotations = (shape, canvas, startTime, endTime, tool) => {
@@ -436,6 +438,26 @@ function App() {
           break;
         }
       }
+      const matchingNote = allNotes.find(
+        (note) =>
+          currentTime >= note.startTime &&
+          currentTime <= note.endTime
+      );
+
+      if (matchingNote) {
+        setActiveNotes({
+          start: matchingNote.startTime,
+          end: matchingNote.endTime,
+          content: matchingNote.content,
+        });
+        setCurrentNoteRange({
+          start: matchingNote.startTime,
+          end: matchingNote.endTime,
+        });
+        setShowNotes(true);
+      } else {
+        setShowNotes(false);
+      }
       const objectsToRemove = [];
       canvas.getObjects().forEach(obj => {
         if (!obj.annotationId) return;
@@ -469,7 +491,7 @@ function App() {
     };
     video.addEventListener("timeupdate", onTimeUpdate);
     return () => video.removeEventListener("timeupdate", onTimeUpdate);
-  }, [annotations, thumbnails]);
+  }, [annotations, thumbnails, allNotes]);
   const handleFilechange = (e) => {
     const selectedFiles = e.target.files[0];
     if (!selectedFiles) return;
@@ -499,15 +521,15 @@ function App() {
       alert("select the time period");
       return;
     }
-    const { startTime, endTime } = activeRangeRef.current;
+    const { start, end } = activeRangeRef.current;
     setCurrentNoteRange({ start, end });
     setShowNotes(true);
-    axios.get(`http://localhost:3000/api/annotations/getNotes/${videoId}`, { startTime, endTime }).then(res => {
+    axios.get(`http://localhost:3000/api/annotations/getNotes/${videoId}`, { params: { start, end } }).then(res => {
       if (res.data) {
-        setNoteContent(res.data);
+        setNotes(res.data);
       }
       else {
-        setNoteContent("");
+        setNotes([]);
       }
     });
   }
@@ -531,6 +553,16 @@ function App() {
       window.removeEventListener("resize", resizeCanvas);
     };
   }, []);
+  useEffect(() => {
+    if (!videoId) return;
+    axios.get(`http://localhost:3000/api/annotations/getNotes/${videoId}`).then(res => {
+      setAllNotes(res.data || []);
+
+    }).catch(err => {
+      console.log("Error fetching notes:", err);
+    })
+
+  }, [videoId]);
   return (
     <div className='flex gap-4 top-4'>
       <div className="gap-2">
@@ -573,9 +605,15 @@ function App() {
                     end: t.end
                   };
                   const existingnotes = notes.find(n => n.startTime === t.start && n.endTime === t.end);
+                  if (existingnotes) {
+                    setActiveNotes(existingnotes);
+                    setShowNotes(true);
+                  }else {
+                    setShowNotes(false);
+                  }
                   setActiveNotes(existingnotes || {
-                    startTime: t.start,
-                    endTime: t.end,
+                    start: t.start,
+                    end: t.end,
                     content: "",
                     images: []
                   });
@@ -600,45 +638,47 @@ function App() {
               <h3 className='text-lg font-semibold mb-2'>Notes for ({activeRangeRef.current?.start}s-{activeRangeRef.current?.end}s)</h3>
               <div
                 contentEditable
-                className='w-full h-32 p-2 border rounded-md bg-white'
-                dengerouslySetInnerHTML={{ __html: noteContent }}
-                onInput={(e) => setNoteContent(e.currentTarget.innerHTML)}
-              >
-                <div className='flex gap-3 mt-2'>
-                  <input type="file" accept='image/*' onChange={(e) => {
-                    const file = e.target.files[0];
-                    if (!file) return;
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                      setNoteContent(prev => prev + `<img src="${reader.result}" style="max-width:200px;" />`);
-                    }
-                    reader.readAsDataURL(file);
-                  }} />
-
-                  <button className='pg-blue-500 text-white px-4 py-2 rounded-md' onClick={() => {
-                    axios.post("http://localhost:3000/api/annotations/saveNotes", {
-                      videoId,
-                      startTime: activeRangeRef.current.start,
-                      endTime: activeRangeRef.current.end,
-                      content: noteContent
-                    }).then(res => {
-                      alert("Notes saves successfully");
-                    })
-                  }}
-                  >Save Notes</button>
-                  <button
-                    className="bg-red-500 text-white px-4 py-2 rounded"
-                    onClick={() => setShowNotes(false)}
-                  >
-                    Close
-                  </button>
-                </div>
+                className="border p-3 min-h-[200px] outline-none"
+                dangerouslySetInnerHTML={{ __html: activeNotes.content }}
+                onInput={(e) => setActiveNotes(prev => ({
+                  ...prev,
+                  content: e.currentTarget.innerHTML
+                }))}
+              />
+              <div className='flex gap-3 mt-2'>
+                <input type="file" accept='image/*' onChange={(e) => {
+                  const file = e.target.files[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = (e) => {
+                    setActiveNotes(prev => prev + `<img src="${reader.result}" style="max-width:200px;" />`);
+                  }
+                  reader.readAsDataURL(file);
+                }} />
+                <button className='bg-blue-500 text-white px-4 py-2 rounded-md' onClick={() => {
+                  axios.post("http://localhost:3000/api/annotations/saveNotes", {
+                    videoId,
+                    start: activeRangeRef.current.start,
+                    end: activeRangeRef.current.end,
+                    content: activeNotes.content
+                  }
+                  ).then(res => {
+                    alert("Notes saves successfully");
+                  })
+                }}
+                >Save Notes</button>
+                <button
+                  className="bg-red-500 text-white px-4 py-2 rounded"
+                  onClick={() => setShowNotes(false)}
+                >
+                  Close
+                </button>
               </div>
             </div>
           )}
         </div>
       </div>
-    </div>
+    </div >
   )
 }
 

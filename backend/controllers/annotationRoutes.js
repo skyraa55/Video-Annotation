@@ -68,26 +68,35 @@ router.get("/time/:videoId",async (req,res)=>{
     }
 });
 router.get("/getNotes/:videoId",async (req,res) => {
-    const { startTime,endTime } = req.body;
-    const note = await notesModel.find({
-        videoId:req.params.videoId,
-        startTime:startTime,
-        endTime:endTime
+    const { videoId } = req.params;
+   const { start,end } = req.query;
+    console.log("videoId-",videoId,"start-",start,"end-",end);
+    const note = await notesModel.findOne({
+        videoId,
+        start:start,
+        end:end
     });
     res.json(note || null);
-
 });
-router.post("/saveNotes",async (req,res) => {
-    const { videoId,startTime,endTime,content } = req.body;
-    let note = await notesModel.find({ videoId,startTime,endTime,content });
-    if(note){
-        note.content = content;
-        await note.save();
-    }
-    else{
-        note = await notesModel.create({ videoId,startTime,endTime,content });
-    }
+router.post("/saveNotes", async (req, res) => {
+  try {
+    const { videoId, start, end, content } = req.body;
+    const note = await notesModel.findOneAndUpdate(
+      { videoId, start, end },
+      { content },
+      { new: true, upsert: true }
+    );
     res.json(note);
-
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: error.message });
+  }
+});
+router.get("/getAllNotes/:videoId",async (req,res) => {
+    const { videoId } = req.params;
+    const notes = await notesModel.find({
+        videoId
+    });
+    res.json(notes);
 })
 export default router;

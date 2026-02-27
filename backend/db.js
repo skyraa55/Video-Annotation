@@ -26,8 +26,8 @@ const notesSchema = new mongoose.Schema({
     ref:"video",
     required:true
   },
-  startTime : Number,
-  endTime : Number,
+  start : Number,
+  end : Number,
   content : {
     type:String,
     default:""
