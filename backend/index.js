@@ -14,6 +14,7 @@ app.use("/api/auth",authRouter);
 app.use("/api/video",videoRouter);
 app.use("/api/cloudinary",cloudinaryRouter);
 app.use("/api/annotations",annotationRouter);
+app.use("/api/export",exportRouter);
 app.listen(process.env.PORT || 3000,()=>{
     console.log(`Server is running on port ${PORT}`);
 });
