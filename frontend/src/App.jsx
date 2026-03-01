@@ -29,6 +29,12 @@ function App() {
   const [showNotes, setShowNotes] = useState(false);
   const [activeNotes, setActiveNotes] = useState({ start: null, end: null, content: "" });
   const [currentNoteRange, setCurrentNoteRange] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const thumbnailContainerRef = useRef(null);
+  const progressBarRef = useRef(null);
+  const [range, setRange] = useState({ start: 0, end: 5 });
+  const [isDraggingRange, setIsDraggingRange] = useState(false);
+
 
   const SerializeAnnotations = (shape, canvas, startTime, endTime, tool) => {
     if (!videoId) {
@@ -488,6 +494,16 @@ function App() {
         }
       });
       canvas.requestRenderAll();
+      if (thumbnailContainerRef.current && video.duration) {
+        const container = thumbnailContainerRef.current;
+        const progress = video.currentTime / video.duration;
+        const maxScroll = container.scrollWidth - container.clientWidth;
+        container.scrollLeft = progress * maxScroll;
+      }
+      if (progressBarRef.current && video.duration) {
+        const percent = (video.currentTime / video.duration) * 100;
+        progressBarRef.current.style.left = `${percent}%`;
+      }
     };
     video.addEventListener("timeupdate", onTimeUpdate);
     return () => video.removeEventListener("timeupdate", onTimeUpdate);
@@ -563,6 +579,56 @@ function App() {
     })
 
   }, [videoId]);
+  useEffect(() => {
+    const mouseMove = (e) => {
+      if (!isDraggingRange || !videoRef.current) return;
+      const container = thumbnailContainerRef.current;
+      const rect = container.getBoundingClientRect();
+      const progress = (e.clientX - rect.left) / rect.width;
+      const newStart = progress * videoRef.current.duration;
+      const duration = range.end - range.start;
+      setRange({
+        start: Math.max(0, newStart),
+        end: Math.min(videoRef.current.duration, newStart + duration)
+      })
+
+    };
+    const handleMoveUp = () => {
+      if (isDraggingRange) {
+        activeRangeRef.current = range;
+        setIsDraggingRange(false);
+      }
+    };
+    window.addEventListener("mousemove", mouseMove);
+    window.addEventListener("mouseup", handleMoveUp);
+    return () => {
+      window.removeEventListener("mousemove", mouseMove);
+      window.removeEventListener("mouseup", handleMoveUp);
+    }
+
+
+
+  }, [isDraggingRange, range])
+  const handlePlayPause = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (video.paused) {
+      video.play();
+      setIsPlaying(true);
+    }
+    else {
+      video.pause();
+      setIsPlaying(false);
+    }
+  }
+  const handleStop = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.pause();
+    video.currentTime = 0;
+    setIsPlaying(false);
+
+  }
   return (
     <div className='flex gap-4 top-4'>
       <div className="gap-2">
@@ -596,7 +662,13 @@ function App() {
               className="absolute top-0 left-0 z-10"
             />
           </div>
-          <div className='flex mt-4 gap-2 overflow-x-auto'>
+          <div className='flex gap-3 mb-4 mt-4'>
+            <button onClick={handlePlayPause} className="bg-green-500 text-white px-4 py-2 rounded-md">{isPlaying ? "Pause" : "Play"}</button>
+            <button onClick={handleStop} className='bg-red-400 text-white px-4 py-2 rounded-md'>
+              Stop
+            </button>
+          </div>
+          {/* <div className='flex mt-4 gap-2 overflow-x-auto'>
             {
               thumbnails.map(t => (
                 <div key={t.start} onClick={() => {
@@ -632,6 +704,74 @@ function App() {
                 </div>
               ))
             }
+          </div> */}
+          <div
+            ref={thumbnailContainerRef}
+            className="relative flex mt-4 gap-2 overflow-x-auto border p-2 bg-gray-100 h-20"
+          >
+         <div
+              ref={progressBarRef}
+              className="absolute top-0 bottom-0 w-[2px] bg-red-600 z-20 pointer-events-none"
+              style={{ left: "0%" }}
+            />
+            {videoRef.current?.duration && (
+              <div
+                className="absolute top-0 bottom-0 bg-blue-400 bg-opacity-30 z-10 cursor-grab"
+                style={{
+                  left: `${(range.start / videoRef.current.duration) * 100}%`,
+                  width: `${((range.end - range.start) / videoRef.current.duration) * 100}%`
+                }}
+                onMouseDown={() => setIsDraggingRange(true)}
+              />
+            )}
+            {thumbnails.map((t) => (
+              <div
+                key={t.start}
+                onClick={() => {
+                  activeRangeRef.current = {
+                    start: t.start,
+                    end: t.end
+                  };
+                  setRange({ start: t.start, end: t.end });
+                  const existingnotes = notes.find(
+                    (n) => n.startTime === t.start && n.endTime === t.end
+                  );
+                  if (existingnotes) {
+                    setActiveNotes(existingnotes);
+                    setShowNotes(true);
+                  } else {
+                    setShowNotes(false);
+                  }
+                  setActiveNotes(
+                    existingnotes || {
+                      start: t.start,
+                      end: t.end,
+                      content: "",
+                      images: []
+                    }
+                  );
+                  const canvas = fabricRef.current;
+                  renderedAnnotationRef.current.forEach((obj) =>
+                    canvas.remove(obj)
+                  );
+                  renderedAnnotationRef.current.clear();
+                  canvas.requestRenderAll();
+
+                  videoRef.current.currentTime = t.start;
+                  videoRef.current.play().catch(() => { });
+                }}
+                className="min-w-[100px] cursor-pointer relative"
+              >
+                <img
+                  src={t.url}
+                  alt={`${t.start}s - ${t.end}s`}
+                  className="w-[100px] h-[70px] object-cover rounded"
+                />
+                <p className="text-xs text-center">
+                  {t.start}s - {t.end}s
+                </p>
+              </div>
+            ))}
           </div>
           {showNotes && (
             <div className="mt-4 p-4 border rounded-md bg-gray-100">
